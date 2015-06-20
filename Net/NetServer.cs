@@ -1,26 +1,64 @@
 ﻿using UnityEngine;
-using System.Collections;
+using System.Collections.Generic;
 using UnityEngine.Networking;
 using System.IO;
 using System.Runtime.Serialization.Formatters.Binary;
 
+/// <summary>
+/// The NetServer handles client tracking, broadcasting and sending/receiving messages from clients.
+/// </summary>
 public class NetServer {
 
 	public int mSocket = -1;
-	private int mPollBufferSize = 1024;
 
-	// Todo : Maintain list of clients
+	public List<int> mClients = new List<int>();
 
 	public bool mIsRunning = false;
 
+	/// <summary>
+	/// Initializes a new instance of the <see cref="NetServer"/> class.
+	/// </summary>
+	/// <param name="socket">Socket provided by NetManager.</param>
 	public NetServer( int socket ) {
 		mSocket = socket;
 		mIsRunning = true;
 	}
 
-	public void BroadcastStream( object o , long buffersize , int channel ){
+	/// <summary>
+	/// Broadcast a stream to all connected clients.
+	/// </summary>
+	/// <param name="o">The object to serialize and stream.</param>
+	/// <param name="buffsize">Max buffer size of object after being serialized.</param>
+	/// <param name="channel">Channel to broadcast on.</param>
+	public void BroadcastStream( object o , long buffsize , int channel ){
+
+		byte error;
+		byte[] buffer = new byte[buffsize];
+		Stream stream = new MemoryStream(buffer);
+		BinaryFormatter f = new BinaryFormatter();
+
+		f.Serialize ( stream , o );
+
+		foreach (int element in mClients ){
+			NetworkTransport.Send ( mSocket , element , NetManager.mChannelReliable , buffer , (int)stream.Position , out error );
+
+			if( NetUtils.IsNetworkError ( error )){
+				Debug.Log("NetServer::SendStream( " + o.ToString () + " , " + buffsize.ToString () + " ) Failed with reason '" + NetUtils.GetNetworkError (error) + "'.");
+			}
+		}
+
+		return;
+	
 	}
 
+	/// <summary>
+	/// Send a stream to a single connected client.
+	/// </summary>
+	/// <returns><c>true</c>, if stream was sent, <c>false</c> otherwise.</returns>
+	/// <param name="o">The object to serialize and stream.</param>
+	/// <param name="buffsize">Max buffer size of object after being serialized.</param>
+	/// <param name="channel">Channel to broadcast on.</param>
+	/// <param name="connId">Connection ID of client to broadcast to.</param>
 	public bool SendStream( object o , long buffsize , int connId , int channel ){
 		
 		byte error;
@@ -33,78 +71,54 @@ public class NetServer {
 		NetworkTransport.Send ( mSocket , connId , NetManager.mChannelReliable , buffer , (int)stream.Position , out error );
 		
 		if( NetUtils.IsNetworkError ( error )){
-			Debug.Log("NetClient::SendStream( " + o.ToString () + " , " + buffsize.ToString () + " ) Failed with reason '" + NetUtils.GetNetworkError (error) + "'.");
+			Debug.Log("NetServer::SendStream( " + o.ToString () + " , " + buffsize.ToString () + " ) Failed with reason '" + NetUtils.GetNetworkError (error) + "'.");
 			return false;
 		}
 		
 		return true;
 	}
 
+	/// <summary>
+	/// Receives a stream and returns it as a deserialized object.
+	/// </summary>
+	/// <returns>The stream.</returns>
+	/// <param name="buffer">Buffer.</param>
 	public object ReceiveStream( byte[] buffer ){
 		Stream stream = new MemoryStream(buffer);
 		BinaryFormatter f = new BinaryFormatter();
 		return f.Deserialize( stream );
-
 	}
 
-	public void PollEvents(){
-
-		// If server isnt running we don't poll
-		if(!mIsRunning){
-			return;
+	/// <summary>
+	/// Adds a client connection to the server after making sure it will be unique. 	
+	/// </summary>
+	/// <returns><c>true</c>, if client was added, <c>false</c> otherwise.</returns>
+	/// <param name="connId">Connection ID</param>
+	public bool AddClient( int connId )
+	{
+		if( mClients.Contains ( connId ) ){
+			Debug.Log ("NetServer::AddClient( " + connId.ToString () + " ) - Id already exists!");
+			return false;
 		}
-		
-		int recHostId; 
-		int connectionId;
-		int channelId;
-		int dataSize;
-		byte[] buffer = new byte[mPollBufferSize];
-		byte error;
-		
-		NetworkEventType networkEvent = NetworkEventType.DataEvent;
-		
-		// Poll both server/client events
-		do
-		{
-			networkEvent = NetworkTransport.Receive( out recHostId , out connectionId , out channelId , buffer , mPollBufferSize , out dataSize , out error );
 
-			switch(networkEvent){
-
-			case NetworkEventType.Nothing:
-				break;
-
-			case NetworkEventType.ConnectEvent:
-				// Server received disconnect event
-				if( recHostId == mSocket ){
-					Debug.Log ("Server: Player " + connectionId.ToString () + " connected!" );
-				}
-				
-				break;
-				
-			case NetworkEventType.DataEvent:
-				// Server received data
-				if( recHostId == mSocket ){
-					
-					// Let's decode data
-					Stream stream = new MemoryStream(buffer);
-					BinaryFormatter f = new BinaryFormatter();
-					string msg = f.Deserialize( stream ).ToString ();
-					
-					Debug.Log ("Server: Received Data from " + connectionId.ToString () + "! Message: " + msg );
-				}
-
-				break;
-				
-			case NetworkEventType.DisconnectEvent:
-
-				// Server received disconnect event
-				if( recHostId == mSocket ){
-					Debug.Log ("Server: Received disconnect from " + connectionId.ToString () );
-				}
-				break;
-			}
-			
-		} while ( networkEvent != NetworkEventType.Nothing );
+		mClients.Add( connId );
+		return true;
 	}
 
+	/// <summary>
+	/// Removes a client connection from the server after making sure that it exists.
+	/// </summary>
+	/// <returns><c>true</c>, if client was removed, <c>false</c> otherwise.</returns>
+	/// <param name="connId">Connection identifier.</param>
+	public bool RemoveClient( int connId )
+	{
+		if( !mClients.Exists ( element => element == connId ) ){
+			Debug.Log ("NetServer::RemoveClient( " + connId.ToString () + " ) - Client not connected!");
+			return false;
+		}
+
+		mClients.Remove( connId );
+		return true;
+
+	}
 }

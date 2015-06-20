@@ -2,6 +2,9 @@
 using System.Collections;
 using UnityEngine.Networking;
 
+/// <summary>
+/// The NetManager is responsible for creating our client and server sockets and housing our messaging queue/delegate system.
+/// </summary>
 public class NetManager : MonoBehaviour {
 
 	// Connection config vars
@@ -9,8 +12,10 @@ public class NetManager : MonoBehaviour {
 	static public byte mChannelReliable;
 	static public byte mChannelUnreliable;
 
-	static public bool mIsInitialized;
+	// True if Init has ran.
+	static public bool mIsInitialized = false;
 
+	// Client and server sockets
 	static public NetClient mClient = null;
 	static public NetServer mServer = null;
 
@@ -23,16 +28,9 @@ public class NetManager : MonoBehaviour {
 	public static NetEventHandler OnClientData = null;
 	public static NetEventHandler OnClientDisconnect = null;
 
-	// Use this for initialization
-	void Start () {
-	
-	}
-	
-	// Update is called once per frame
-	void Update () {
-	
-	}
-
+	/// <summary>
+	/// Initialize our low level network APIs.
+	/// </summary>
 	public static void Init (){
 
 		// Set up NetworkTransport
@@ -50,6 +48,12 @@ public class NetManager : MonoBehaviour {
 
 	}
 
+	/// <summary>
+	/// Creates a server that listens on a given port.
+	/// </summary>
+	/// <returns>The server object.</returns>
+	/// <param name="maxConnections">Max connections.</param>
+	/// <param name="port">Port.</param>
 	public static NetServer CreateServer ( int maxConnections , int port ){
 
 		if(!mIsInitialized){
@@ -77,6 +81,10 @@ public class NetManager : MonoBehaviour {
 
 	}
 
+	/// <summary>
+	/// Create a client that is ready to connect with a server.
+	/// </summary>
+	/// <returns>The client.</returns>
 	public static NetClient CreateClient (){
 
 		if(!mIsInitialized){
@@ -100,20 +108,6 @@ public class NetManager : MonoBehaviour {
 		mClient = c;
 
 		return c;
-	}
-
-	public static int ClientConnect( int socket , string ip , int port ){
-
-		byte error;
-		int clientconnection = NetworkTransport.Connect( socket , ip , port , 0 , out error );
-
-		if( NetUtils.IsNetworkError ( error )){
-			Debug.Log(" NetManager::ClientConnect( " + socket.ToString () + " , " + ip + " , " + port.ToString () + ") Failed with reason '" + NetUtils.GetNetworkError (error) + "'.");
-			return -1;
-		}
-
-		return clientconnection;
-
 	}
 
 	/// <summary>
@@ -144,14 +138,19 @@ public class NetManager : MonoBehaviour {
 			// Connect
 			case NetworkEventType.ConnectEvent:
 				// Server Connect Event
-				if( recHostId == mServer.mSocket){
-					OnServerConnection( connectionId , channelId , buffer , dataSize );
+				if(mServer != null){
+					if( recHostId == mServer.mSocket){
+						OnServerConnection( connectionId , channelId , buffer , dataSize );
+						mServer.AddClient ( connectionId );
+					}
 				}
 
 				// Client Connect Event
-				if( recHostId == mClient.mSocket ){
-					OnClientConnection( connectionId , channelId , buffer , dataSize );
-					mClient.mConnected = true; // Set client connected to true
+				if(mClient != null){
+					if( recHostId == mClient.mSocket ){
+						OnClientConnection( connectionId , channelId , buffer , dataSize );
+						mClient.mConnected = true; // Set client connected to true
+					}
 				}
 				
 				break;
@@ -160,17 +159,21 @@ public class NetManager : MonoBehaviour {
 			case NetworkEventType.DataEvent:
 
 				// Server Received Data
-				if( recHostId == mServer.mSocket ){
+				if(mServer != null){
+					if( recHostId == mServer.mSocket ){
 
-					// Server Data Delegate
-					OnServerData( connectionId , channelId , buffer , dataSize );
+						// Server Data Delegate
+						OnServerData( connectionId , channelId , buffer , dataSize );
+					}
 				}
 
 				// Client Received Data
-				if( recHostId == mClient.mSocket ){
+				if(mClient != null){
+					if( recHostId == mClient.mSocket ){
 
-					// Client Data Delegate
-					OnClientData(  connectionId , channelId , buffer , dataSize );
+						// Client Data Delegate
+						OnClientData(  connectionId , channelId , buffer , dataSize );
+					}
 				}
 				break;
 
@@ -178,17 +181,22 @@ public class NetManager : MonoBehaviour {
 			case NetworkEventType.DisconnectEvent:
 
 				// Server Received Disconnect
-				if( recHostId == mServer.mSocket ){
-					OnServerDisconnect( connectionId , channelId , buffer , dataSize );
+				if(mServer != null){
+					if( recHostId == mServer.mSocket ){
+						OnServerDisconnect( connectionId , channelId , buffer , dataSize );
+						mServer.RemoveClient ( connectionId );
+					}
 				}
 
 				// Client Received Disconnect
-				if( recHostId == mClient.mSocket && connectionId == mClient.mConnection){
-					
-					// Flag to let client know it can no longer send data
-					mClient.mConnected = false;
+				if(mClient != null){
+					if( recHostId == mClient.mSocket && connectionId == mClient.mConnection){
+						
+						// Flag to let client know it can no longer send data
+						mClient.mConnected = false;
 
-					OnClientDisconnect(  connectionId , channelId , buffer , dataSize );
+						OnClientDisconnect(  connectionId , channelId , buffer , dataSize );
+					}
 				}
 				
 

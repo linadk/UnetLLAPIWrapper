@@ -4,17 +4,28 @@ using UnityEngine.Networking;
 using System.IO;
 using System.Runtime.Serialization.Formatters.Binary;
 
+/// <summary>
+/// The net client handles connecting to a server as well as sending and receiving messages. 
+/// </summary>
 public class NetClient{
 
 	public int mSocket = -1;
 	public int mConnection = -1;
 	public bool mConnected = false;
 	
-	// Use this for initialization
+	/// <summary>
+	/// Initializes a new instance of the <see cref="NetClient"/> class.
+	/// </summary>
+	/// <param name="socket">Valid socket id for the NetClient. Given by NetManager.</param>
 	public NetClient ( int socket ) {
 		mSocket = socket;
 	}
 
+	/// <summary>
+	/// Connect the specified ip and port.
+	/// </summary>
+	/// <param name="ip">Ip.</param>
+	/// <param name="port">Port.</param>
 	public bool Connect( string ip , int port ){
 
 		byte error;
@@ -28,6 +39,12 @@ public class NetClient{
 		return true;
 	}
 
+	/// <summary>
+	/// Sends the stream.
+	/// </summary>
+	/// <returns><c>true</c>, if stream was sent, <c>false</c> otherwise.</returns>
+	/// <param name="o">The object you wish to send as a serialized stream.</param>
+	/// <param name="buffsize">Max buffer size for your data.</param>
 	public bool SendStream( object o , long buffsize ){
 
 		byte error;
@@ -47,63 +64,14 @@ public class NetClient{
 		return true;
 	}
 
+	/// <summary>
+	/// Returns a deserialized stream object.
+	/// </summary>
+	/// <param name="buffer">Buffer that contains the data.</param>
 	public object ReceiveStream( byte[] buffer ){
 		Stream stream = new MemoryStream(buffer);
 		BinaryFormatter f = new BinaryFormatter();
 		return f.Deserialize( stream );	
-	}
-
-	public void PollEvents(){
-		
-		int recHostId; 
-		int connectionId;
-		int channelId;
-		int dataSize;
-		byte[] buffer = new byte[1024];
-		byte error;
-		
-		NetworkEventType networkEvent = NetworkEventType.DataEvent;
-		
-		// Poll both server/client events
-		do
-		{
-			networkEvent = NetworkTransport.Receive( out recHostId , out connectionId , out channelId , buffer , 1024 , out dataSize , out error );
-
-			Debug.Log (networkEvent.ToString () );
-			
-			switch(networkEvent){
-			case NetworkEventType.Nothing:
-				break;
-			case NetworkEventType.ConnectEvent:
-				if( recHostId == mSocket ){
-					Debug.Log ("Client: Client connected to " + connectionId.ToString () + "!" );
-					
-					// Set our flag to let client know that they can start sending data and send some data
-					mConnected = true; 
-					this.SendStream( 32 + "Hello2!" , 1024 );
-				}
-				
-				break;
-				
-			case NetworkEventType.DataEvent:
-				if( recHostId == mSocket ){
-					Debug.Log ("Client: Received Data from " + connectionId.ToString () + "!" );
-				}
-				break;
-				
-			case NetworkEventType.DisconnectEvent:
-				// Client received disconnect event
-				if( recHostId == mSocket && connectionId == mConnection ){
-					Debug.Log ("Client: Disconnected from server!");
-					
-					// Flag to let client know it can no longer send data
-					mConnected = false;
-				}
-
-				break;
-			}
-			
-		} while ( networkEvent != NetworkEventType.Nothing );
 	}
 
 }

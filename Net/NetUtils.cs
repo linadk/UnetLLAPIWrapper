@@ -17,6 +17,9 @@ public static class NetUtils {
 		return "";
 	}	
 
+	/// <summary>
+	/// Returns true if the given code is a network error, false if not.
+	/// </summary>
 	public static bool IsNetworkError( byte error ){
 		if( error != (byte)NetworkError.Ok){
 			return true;
@@ -27,6 +30,9 @@ public static class NetUtils {
 		}
 	}
 
+	/// <summary>
+	/// Returns true if our socket id is valid, false if not.
+	/// </summary>
 	public static bool IsSocketValid( int sock ){
 		if( sock < 0 ){
 			return false;
