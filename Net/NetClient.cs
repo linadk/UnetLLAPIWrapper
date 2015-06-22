@@ -35,7 +35,28 @@ public class NetClient{
 			Debug.Log("NetClient::Connect( "  + ip + " , " + port.ToString () + " ) Failed with reason '" + NetUtils.GetNetworkError (error) + "'.");
 			return false;
 		}
+		return true;
+	}
 
+	/// <summary>
+	/// Disconnect the client from the server.
+	/// </summary>
+	public bool Disconnect( ){
+
+		if(!mConnected){
+			Debug.Log ("NetClient::Disconnect() Failed with reason 'Not connected to server!");
+			return false;
+		}
+
+		byte error;
+
+		NetworkTransport.Disconnect ( mSocket , mConnection , out error );
+
+		if( NetUtils.IsNetworkError ( error )){
+			Debug.Log("NetClient::Disconnect() Failed with reason '" + NetUtils.GetNetworkError (error) + "'.");
+			return false;
+		}
+		
 		return true;
 	}
 

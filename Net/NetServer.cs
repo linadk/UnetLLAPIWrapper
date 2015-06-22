@@ -90,6 +90,30 @@ public class NetServer {
 	}
 
 	/// <summary>
+	/// Disconnects a client via specified id.
+	/// </summary>
+	/// <returns><c>true</c>, if client was disconnected, <c>false</c> otherwise.</returns>
+	public bool DisconnectClient( int connId )
+	{
+		if(!HasClient (connId)){
+			Debug.Log ("NetServer::DisconnectClient( " + connId + " ) Failed with reason 'Client with id does not exist!'");
+			return false;
+		}
+
+		byte error;
+		NetworkTransport.Disconnect( mSocket , connId , out error );
+
+		if( NetUtils.IsNetworkError ( error )){
+			Debug.Log("NetServer::DisconnectClient( " + connId + " ) Failed with reason '" + NetUtils.GetNetworkError (error) + "'.");
+			return false;
+		}
+
+		return true;
+
+	}
+
+
+	/// <summary>
 	/// Adds a client connection to the server after making sure it will be unique. 	
 	/// </summary>
 	/// <returns><c>true</c>, if client was added, <c>false</c> otherwise.</returns>
@@ -119,6 +143,15 @@ public class NetServer {
 
 		mClients.Remove( connId );
 		return true;
+	}
 
+	/// <summary>
+	/// Determines whether this instance has a client of the specified connId.
+	/// </summary>
+	/// <returns><c>true</c> if this instance has a client of the specified connId; otherwise, <c>false</c>.</returns>
+	/// <param name="connId">Conn identifier.</param>
+	public bool HasClient( int connId )
+	{
+		return mClients.Exists ( element => element == connId );
 	}
 }

@@ -20,6 +20,7 @@ public class NetworkTest : MonoBehaviour {
 	
 	NetServer mServer;
 	NetClient mClient;
+	bool ranOnce = false;
 
 
 	// Use this for initialization
@@ -46,10 +47,13 @@ public class NetworkTest : MonoBehaviour {
 		DebugConsole.IsOpen = true;
 		DebugConsole.RegisterCommand( "server.start" , ConsoleServerStart );
 		DebugConsole.RegisterCommand( "client.connect" , ConsoleClientConnect );
+		DebugConsole.RegisterCommand( "client.disconnect" , ConsoleClientDisconnect );
 		DebugConsole.RegisterCommand( "client.send" , ConsoleClientSend );
 		DebugConsole.RegisterCommand( "server.send" , ConsoleServerSend );
 		DebugConsole.RegisterCommand( "server.getclients" , ConsoleServerGetClients );
 		DebugConsole.RegisterCommand( "server.broadcast" , ConsoleServerBroadcast );
+		DebugConsole.RegisterCommand("server.disconnect" , ConsoleServerDisconnect );
+		DebugConsole.RegisterCommand ("network.test" , FullLocalTest );
 		
 	}
 
@@ -71,7 +75,7 @@ public class NetworkTest : MonoBehaviour {
 	}
 
 	/// <summary>
-	/// Consoles command for connecting a client.
+	/// Console command for connecting a client.
 	/// </summary>
 	public string ConsoleClientConnect( params string[] args ){
 		if( args.Length < 3 ){
@@ -86,6 +90,26 @@ public class NetworkTest : MonoBehaviour {
 		} else {
 			return "Client connection failed!";
 		}
+	}
+
+	/// <summary>
+	/// Consoles command for connecting a client.
+	/// </summary>
+	public string ConsoleClientDisconnect( params string[] args ){
+		if( args.Length > 1  ){
+			return "Invalid Number of Arguments : client.disconnect takes no arguments";
+		}
+		
+		bool ret = mClient.Disconnect ();
+
+		if(ret){
+			return "Client has been disconnected!";
+		}
+		else
+		{
+			return "Client disconnection failed!";
+		}
+		
 	}
 
 	/// <summary>
@@ -158,6 +182,77 @@ public class NetworkTest : MonoBehaviour {
 	}
 
 	/// <summary>
+	/// Disconnect a client of a given id from server. Usage: server.disconnect <clientid>
+	/// </summary>
+	public string ConsoleServerDisconnect( params string[] args ){
+		
+		if( !mServer.mIsRunning ){
+			return "Server not running!";
+		}
+
+		if( args.Length < 2){
+			return "Invalid Number of Arguments : server.broadcast <message>";
+		}
+
+		bool res = mServer.DisconnectClient( int.Parse (args[1]) );
+		if( res ){ return "User " + args[1] + "disconnected!"; } else { return "User " + args[1] + "not disconnected!"; }
+
+	}
+
+	/// <summary>
+	/// Runs network test to determine interface functionality status. Currently has bug where running twice crashes.
+	/// </summary>
+	/// <returns>The local test.</returns>
+	/// <param name="args">Arguments.</param>
+	public string FullLocalTest( params string[] args ){
+
+		int port = Random.Range( 100 , 99999 );
+		int maxUsers = Random.Range( 2 , 100 );
+		string ip = "127.0.0.1";
+
+		Debug.Log ("FullLocalTest() START : Port( " + port.ToString () + " ) MaxUsers( " + maxUsers.ToString() + ")");
+
+
+
+		mServer = NetManager.CreateServer( maxUsers , port );
+
+		if(mServer == null){ Debug.Log ("FullLocalTest() ERROR : Server instance not created!" ); return ""; }
+		if(!NetUtils.IsSocketValid( mServer.mSocket )){ Debug.Log ("FullLocalTest() ERROR : Server socket invalid!" ); return ""; }
+		if(!mServer.mIsRunning){ Debug.Log ("FullLocalTest() ERROR : Server is not running after create server called!" ); return ""; }
+		
+		Debug.Log ("FullLocalTest() : Server started successfully!");
+
+		mClient = NetManager.CreateClient ();
+
+		if(mClient == null){ Debug.Log ("FullLocalTest() ERROR : Client instance not created!" ); return ""; }
+		if(!NetUtils.IsSocketValid ( mClient.mSocket ) ){ Debug.Log ("FullLocalTest() ERROR : Client socket invalid!"); return ""; }
+
+		Debug.Log ("FullLocalTest() : Client started successfully!");
+
+		if(! mClient.Connect ( ip , port ) ){ Debug.Log ("FullLocalTest() ERROR : Client connect failed!"); return ""; }
+
+		// Poll network until we are connected
+		while( ! mClient.mConnected ){
+			NetManager.PollEvents ();
+		}
+
+		if(! mClient.Disconnect () ) { Debug.Log ("FullLocalTest() FAIL : Client disconnect failed!"); return ""; }
+
+		// Poll until we are disconnected
+		while( mClient.mConnected ){
+			NetManager.PollEvents ();
+		}
+
+		//NetManager.DestroyServer(); - Crashes if we use htis
+
+		Debug.Log ("FullLocalTest() : PASS");
+
+		return "Network Test COMPLETE | Status: PASS";
+
+	}
+
+
+	/// <summary>
 	/// Poll for our network events. 
 	/// </summary>
 	void Update() {
@@ -182,7 +277,7 @@ public class NetworkTest : MonoBehaviour {
 	/// Callback that fires when a client disconnects from the server.
 	/// </summary>
 	public void ServerDisconnect( int connectionId , int channelId , byte[] buffer , int datasize ){
-		DebugConsole.Log ("Client: User disconnected from server! ");
+		DebugConsole.Log ("Server: User disconnected from server! ");
 	}
 
 	/// <summary>

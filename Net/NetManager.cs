@@ -81,6 +81,18 @@ public class NetManager : MonoBehaviour {
 
 	}
 
+	public static bool DestroyServer(){
+
+		if(!NetworkTransport.RemoveHost( mServer.mSocket )){
+			Debug.Log ("NetManager::DestroyServer() - Server could not be destroyed!");
+			return false;
+		}
+
+		mServer = null;
+		return true;
+	}
+
+
 	/// <summary>
 	/// Create a client that is ready to connect with a server.
 	/// </summary>
@@ -95,6 +107,7 @@ public class NetManager : MonoBehaviour {
 		if(mClient != null)
 		{
 			Debug.Log ("NetManager::CreateClient( ... ) - Client already running!");
+			return mClient;
 		}
 
 		HostTopology ht = new HostTopology( mConnectionConfig , 1 ); // Clients only need 1 connection
@@ -114,6 +127,11 @@ public class NetManager : MonoBehaviour {
 	/// Reads network events and delegates how they are used
 	/// </summary>
 	public static void PollEvents(){
+
+		// If nothing is running, why bother
+		if( mServer == null && mClient == null ){
+			return;
+		}
 		
 		int recHostId; 
 		int connectionId;
