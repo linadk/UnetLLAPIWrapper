@@ -10,17 +10,38 @@ using System.Runtime.Serialization.Formatters.Binary;
 public class NetServer {
 
 	public int mSocket = -1;
-
+	public int mPort = -1;
+	public bool mIsRunning = false;
+	
 	public List<int> mClients = new List<int>();
 
-	public bool mIsRunning = false;
+	/// <summary>
+	/// Our delegate that gets called to handle processing data 	
+	/// </summary>
+	public delegate void NetEventHandler( NetworkEventType net , int connectionId , int channelId , byte[] buffer , int datasize );
+	public NetEventHandler OnMessage = null;
+	
+
 
 	/// <summary>
 	/// Initializes a new instance of the <see cref="NetServer"/> class.
 	/// </summary>
-	/// <param name="socket">Socket provided by NetManager.</param>
-	public NetServer( int socket ) {
-		mSocket = socket;
+	/// <param name="maxConnections">Max connections.</param>
+	/// <param name="port">Port.</param>
+	public NetServer( int maxConnections , int port ) {
+
+		if(!NetManager.mIsInitialized){
+			Debug.Log ("NetServer( ... ) - NetManager was not initialized. Did you forget to call NetManager.Init()?");
+			return;
+		}
+
+		HostTopology ht = new HostTopology( NetManager.mConnectionConfig , maxConnections );
+		mSocket = NetworkTransport.AddHost ( ht , port  );
+
+		if(!NetUtils.IsSocketValid (mSocket)){
+			Debug.Log ("NetServer::NetServer( " + maxConnections + " , " + port.ToString () + " ) returned an invalid socket ( " + mSocket.ToString() + " )" );
+		}
+		
 		mIsRunning = true;
 	}
 
@@ -31,7 +52,7 @@ public class NetServer {
 	/// <param name="buffsize">Max buffer size of object after being serialized.</param>
 	/// <param name="channel">Channel to broadcast on.</param>
 	public void BroadcastStream( object o , long buffsize , int channel ){
-
+		
 		byte error;
 		byte[] buffer = new byte[buffsize];
 		Stream stream = new MemoryStream(buffer);
@@ -40,6 +61,7 @@ public class NetServer {
 		f.Serialize ( stream , o );
 
 		foreach (int element in mClients ){
+
 			NetworkTransport.Send ( mSocket , element , NetManager.mChannelReliable , buffer , (int)stream.Position , out error );
 
 			if( NetUtils.IsNetworkError ( error )){

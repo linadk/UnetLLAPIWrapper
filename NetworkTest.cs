@@ -15,12 +15,12 @@
 
 using UnityEngine;
 using System.Collections;
+using UnityEngine.Networking;
 
 public class NetworkTest : MonoBehaviour {
-	
+
 	NetServer mServer;
 	NetClient mClient;
-	bool ranOnce = false;
 
 
 	// Use this for initialization
@@ -32,11 +32,6 @@ public class NetworkTest : MonoBehaviour {
 		//mServer = NetManager.CreateServer( 10 , 7777 );
 		//mClient = NetManager.CreateClient ();
 		//mClient.Connect( "127.0.0.1" , 7777 );
-
-		// Server Event Callbacks
-		NetManager.OnServerConnection = ServerConnection;
-		NetManager.OnServerData = ServerData;
-		NetManager.OnServerDisconnect = ServerDisconnect;
 
 		// Client Event Callbacks
 		NetManager.OnClientConnection = ClientConnection;
@@ -66,8 +61,9 @@ public class NetworkTest : MonoBehaviour {
 		}
 
 		mServer = NetManager.CreateServer( int.Parse ( args[1] ) , int.Parse( args[2] ) );
-
+		
 		if(mServer != null){ 
+			mServer.OnMessage = OnServerMessage;
 			return "Server is running!";
 		} else {
 			return "Server failed to start!";
@@ -120,7 +116,7 @@ public class NetworkTest : MonoBehaviour {
 			return "Invalid Number of Arguments : client.send <message>";
 		}
 
-		if( !mClient.mConnected ){
+		if( !mClient.mIsConnected ){
 			return "Client not connected!";
 		}
 
@@ -212,10 +208,11 @@ public class NetworkTest : MonoBehaviour {
 
 		Debug.Log ("FullLocalTest() START : Port( " + port.ToString () + " ) MaxUsers( " + maxUsers.ToString() + ")");
 
-
-
 		mServer = NetManager.CreateServer( maxUsers , port );
 
+		mServer.OnMessage = OnServerMessage;
+
+		
 		if(mServer == null){ Debug.Log ("FullLocalTest() ERROR : Server instance not created!" ); return ""; }
 		if(!NetUtils.IsSocketValid( mServer.mSocket )){ Debug.Log ("FullLocalTest() ERROR : Server socket invalid!" ); return ""; }
 		if(!mServer.mIsRunning){ Debug.Log ("FullLocalTest() ERROR : Server is not running after create server called!" ); return ""; }
@@ -227,27 +224,14 @@ public class NetworkTest : MonoBehaviour {
 		if(mClient == null){ Debug.Log ("FullLocalTest() ERROR : Client instance not created!" ); return ""; }
 		if(!NetUtils.IsSocketValid ( mClient.mSocket ) ){ Debug.Log ("FullLocalTest() ERROR : Client socket invalid!"); return ""; }
 
+		mClient.OnMessage = OnClientMessage;
+		
 		Debug.Log ("FullLocalTest() : Client started successfully!");
 
 		if(! mClient.Connect ( ip , port ) ){ Debug.Log ("FullLocalTest() ERROR : Client connect failed!"); return ""; }
 
-		// Poll network until we are connected
-		while( ! mClient.mConnected ){
-			NetManager.PollEvents ();
-		}
-
-		if(! mClient.Disconnect () ) { Debug.Log ("FullLocalTest() FAIL : Client disconnect failed!"); return ""; }
-
-		// Poll until we are disconnected
-		while( mClient.mConnected ){
-			NetManager.PollEvents ();
-		}
-
-		//NetManager.DestroyServer(); - Crashes if we use htis
-
-		Debug.Log ("FullLocalTest() : PASS");
-
-		return "Network Test COMPLETE | Status: PASS";
+		// Now we go to our On*Message delegates to do the rest of the testing
+		return "";
 
 	}
 
@@ -259,28 +243,103 @@ public class NetworkTest : MonoBehaviour {
 		NetManager.PollEvents();
 	}
 
+	IEnumerator Wait()
+	{
+			yield return new WaitForSeconds(1.0f);
+	}
+	
+	
 	/// <summary>
-	/// Callback that is fired when a client connects to a server
+	/// Handle server messages	
 	/// </summary>
-	public void ServerConnection( int connectionId , int channelId , byte[] buffer , int datasize ){
-		DebugConsole.Log ( "Server: Connection to " + connectionId.ToString () );
+	/// <param name="networkEvent">Network event.</param>
+	/// <param name="connectionId">Connection identifier.</param>
+	/// <param name="channelId">Channel identifier.</param>
+	/// <param name="buffer">Buffer.</param>
+	/// <param name="datasize">Datasize.</param>
+	public void OnServerMessage( NetworkEventType networkEvent , int connectionId , int channelId , byte[] buffer, int datasize ){
+
+
+		switch(networkEvent){
+			
+			// Nothing
+		case NetworkEventType.Nothing:
+			break;
+			
+			// Connect
+		case NetworkEventType.ConnectEvent:
+			mServer.SendStream("Hello from the server!" , 1024 , connectionId , NetManager.mChannelReliable );
+			break;
+			
+			// Data 
+		case NetworkEventType.DataEvent:
+			string data = mServer.ReceiveStream ( buffer ).ToString ();
+
+			switch(data){
+			case "Hello from the client!":
+				Debug.Log ( "Test SUCCESS: Received stream from client" );
+				mServer.BroadcastStream ("Broadcast test!" , 1024 , NetManager.mChannelReliable );
+				break;
+			default:
+				Debug.Log ( "Test FAIL : Data received on server was incorrect!" );
+				break;
+			}
+			
+			break;
+			
+			// Disconnect
+		case NetworkEventType.DisconnectEvent:
+			Debug.Log ("Client disconnect event processed, shutting down server");
+			NetManager.Shutdown ();
+			DebugConsole.Log ("All tests passed!");
+			break;
+		}
 	}
 
 	/// <summary>
-	/// Callback that fires when data is received by the server.
+	/// Handle client messages
 	/// </summary>
-	public void ServerData( int connectionId , int channelId , byte[] buffer , int datasize ){
-		DebugConsole.Log ("Client " + connectionId.ToString () + " says: " + mServer.ReceiveStream( buffer ).ToString () );
+	/// <param name="networkEvent">Network event.</param>
+	/// <param name="connectionId">Connection identifier.</param>
+	/// <param name="channelId">Channel identifier.</param>
+	/// <param name="buffer">Buffer.</param>
+	/// <param name="datasize">Datasize.</param>
+	public void OnClientMessage( NetworkEventType networkEvent , int connectionId , int channelId , byte[] buffer, int datasize ){
+		
+		
+		switch(networkEvent){
+			
+		// Connect
+		case NetworkEventType.ConnectEvent:
+			break;
+			
+		// Data 
+		case NetworkEventType.DataEvent:
+			string data = mClient.ReceiveStream( buffer ).ToString ();
+
+			switch(data){
+			case "Hello from the server!":
+				mClient.SendStream ("Hello from the client!", 1024);
+				Debug.Log("Test SUCCESS : Received stream from server!");
+				break;
+			case "Broadcast test!":
+				Debug.Log ("Test SUCCESS : Received broadcast from server!");
+				mClient.Disconnect ();
+				break;
+			default:
+				Debug.Log ("Test FAIL : One or more data messages were incorrect!(" + data + ")");
+				break;
+			}
+
+			break;
+			
+		// Disconnect
+		case NetworkEventType.DisconnectEvent:
+			break;
+		}
 	}
 
-	/// <summary>
-	/// Callback that fires when a client disconnects from the server.
-	/// </summary>
-	public void ServerDisconnect( int connectionId , int channelId , byte[] buffer , int datasize ){
-		DebugConsole.Log ("Server: User disconnected from server! ");
-	}
-
-	/// <summary>
+/// <summary>
 	/// Callback that is fired on the client when the client connects to a server
 	/// </summary>
 	public void ClientConnection( int connectionId , int channelId , byte[] buffer , int datasize ){

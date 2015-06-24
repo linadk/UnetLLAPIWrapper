@@ -1,5 +1,5 @@
 ﻿using UnityEngine;
-using System.Collections;
+using System.Collections.Generic;
 using UnityEngine.Networking;
 
 /// <summary>
@@ -8,22 +8,19 @@ using UnityEngine.Networking;
 public class NetManager : MonoBehaviour {
 
 	// Connection config vars
-	static private ConnectionConfig mConnectionConfig;
+	static public ConnectionConfig mConnectionConfig;
 	static public byte mChannelReliable;
 	static public byte mChannelUnreliable;
 
 	// True if Init has ran.
 	static public bool mIsInitialized = false;
 
-	// Client and server sockets
-	static public NetClient mClient = null;
-	static public NetServer mServer = null;
+	// Lists to hold our clients
+	static public List<NetServer> mServers = new List<NetServer>();
+	static public List<NetClient> mClients = new List<NetClient>();
 
 	// Delegates for polling
 	public delegate void NetEventHandler( int connectionId , int channelId , byte[] buffer , int datasize );
-	public static NetEventHandler OnServerConnection = null;
-	public static NetEventHandler OnServerData = null;
-	public static NetEventHandler OnServerDisconnect = null;
 	public static NetEventHandler OnClientConnection = null;
 	public static NetEventHandler OnClientData = null;
 	public static NetEventHandler OnClientDisconnect = null;
@@ -48,6 +45,11 @@ public class NetManager : MonoBehaviour {
 
 	}
 
+	public static void Shutdown (){
+		NetworkTransport.Shutdown ();
+		mIsInitialized = false;
+	}
+	
 	/// <summary>
 	/// Creates a server that listens on a given port.
 	/// </summary>
@@ -56,39 +58,33 @@ public class NetManager : MonoBehaviour {
 	/// <param name="port">Port.</param>
 	public static NetServer CreateServer ( int maxConnections , int port ){
 
-		if(!mIsInitialized){
-			Debug.Log ("NetManager::CreateServer( ... ) - NetManager was not initialized. Did you forget to call NetManager.Init()?");
-			return null;
+		NetServer s = new NetServer( maxConnections , port );
+
+		// If we were successful in creating our server and it is unique
+		if(s.mIsRunning && mServers.Contains (s) != true ){
+			mServers.Add (s);
 		}
-
-		if(mServer != null)
-		{
-			Debug.Log ("NetManager::CreateServer( ... ) - Server already running!");
-			return mServer;
-		}
-
-		HostTopology ht = new HostTopology( mConnectionConfig , maxConnections  );
-		int ssocket = NetworkTransport.AddHost ( ht , port  );
-
-		if(!NetUtils.IsSocketValid (ssocket)){
-			Debug.Log ("NetManager::CreateServer( " + maxConnections + " , " + port.ToString () + " ) returned an invalid socket ( " + ssocket.ToString() + " )" );
-		}
-
-		NetServer s = new NetServer(ssocket);
-		mServer = s;
 
 		return s;
-
 	}
 
-	public static bool DestroyServer(){
 
-		if(!NetworkTransport.RemoveHost( mServer.mSocket )){
-			Debug.Log ("NetManager::DestroyServer() - Server could not be destroyed!");
+	/// <summary>
+	/// Destroys the server.
+	/// </summary>
+	/// <returns><c>true</c>, if server was destroyed, <c>false</c> otherwise.</returns>
+	/// <param name="s">NetServer to destroy</param>
+	public static bool DestroyServer( NetServer s ){
+
+		if( mServers.Contains (s) == false){
+			Debug.Log ("NetManager::DestroyServer( " + s.mSocket.ToString() + ") - Server does not exist!");
 			return false;
 		}
 
-		mServer = null;
+		NetworkTransport.RemoveHost( s.mSocket );
+
+		mServers.Remove( s );
+		
 		return true;
 	}
 
@@ -104,23 +100,32 @@ public class NetManager : MonoBehaviour {
 			return null;
 		}
 
-		if(mClient != null)
-		{
-			Debug.Log ("NetManager::CreateClient( ... ) - Client already running!");
-			return mClient;
+		NetClient c = new NetClient();
+
+		if(mClients.Contains(c) != true ){
+			mClients.Add (c);
 		}
-
-		HostTopology ht = new HostTopology( mConnectionConfig , 1 ); // Clients only need 1 connection
-		int csocket = NetworkTransport.AddHost ( ht  );
-
-		if(!NetUtils.IsSocketValid (csocket)){
-			Debug.Log ("NetManager::CreateClient() returned an invalid socket ( " + csocket + " )" );
-		}
-
-		NetClient c = new NetClient(csocket);
-		mClient = c;
 
 		return c;
+	}
+
+	/// <summary>
+	/// Destroys specified client.
+	/// </summary>
+	/// <returns><c>true</c>, if client was destroyed, <c>false</c> otherwise.</returns>
+	/// <param name="c">NetClient object to destroy</param>
+	public static bool DestroyClient( NetClient c ){
+
+		if( mClients.Contains(c) == false ){
+			Debug.Log ("NetManager::DestroyClient( " + c.mSocket.ToString () + ") - Client does not exist!" );
+			return false;
+		}
+
+		NetworkTransport.RemoveHost( c.mSocket );
+
+		mClients.Remove (c);
+
+		return true;
 	}
 
 	/// <summary>
@@ -129,7 +134,7 @@ public class NetManager : MonoBehaviour {
 	public static void PollEvents(){
 
 		// If nothing is running, why bother
-		if( mServer == null && mClient == null ){
+		if( mServers.Count < 1 && mClients.Count < 1 ){
 			return;
 		}
 		
@@ -141,11 +146,26 @@ public class NetManager : MonoBehaviour {
 		byte error;
 		
 		NetworkEventType networkEvent = NetworkEventType.DataEvent;
-		
-		// Poll both server/client events
-		do
+
+		// Process network events for n clients and n servers
+		while( mIsInitialized && networkEvent != NetworkEventType.Nothing )
 		{
+			int i = -1; // Index for netserver in mservers
+
 			networkEvent = NetworkTransport.Receive( out recHostId , out connectionId , out channelId , buffer , 1024 , out dataSize , out error );
+
+			// Route message to our server delegate
+			i = mServers.FindIndex ( x => x.mSocket == recHostId );
+			if( i != -1 ){
+				mServers[i].OnMessage( networkEvent , connectionId , channelId , buffer , dataSize );
+			}
+
+			// Route message to our client delegate
+			// Client Connect Event
+			i = mClients.FindIndex ( c => c.mSocket.Equals (recHostId) );
+			if( i != -1 ){
+				mClients[i].OnMessage( networkEvent , connectionId , channelId , buffer, dataSize );
+			}
 			
 			switch(networkEvent){
 
@@ -155,20 +175,18 @@ public class NetManager : MonoBehaviour {
 
 			// Connect
 			case NetworkEventType.ConnectEvent:
+
 				// Server Connect Event
-				if(mServer != null){
-					if( recHostId == mServer.mSocket){
-						OnServerConnection( connectionId , channelId , buffer , dataSize );
-						mServer.AddClient ( connectionId );
-					}
+				i = mServers.FindIndex ( s => s.mSocket.Equals (recHostId) );
+
+				if( i != -1 ){
+					mServers[i].AddClient ( connectionId );
 				}
 
 				// Client Connect Event
-				if(mClient != null){
-					if( recHostId == mClient.mSocket ){
-						OnClientConnection( connectionId , channelId , buffer , dataSize );
-						mClient.mConnected = true; // Set client connected to true
-					}
+				i = mClients.FindIndex ( c => c.mSocket.Equals (recHostId) );
+				if( i != -1 ){
+					mClients[i].mIsConnected = true; // Set client connected to true
 				}
 				
 				break;
@@ -176,52 +194,39 @@ public class NetManager : MonoBehaviour {
 			// Data 
 			case NetworkEventType.DataEvent:
 
-				// Server Received Data
-				if(mServer != null){
-					if( recHostId == mServer.mSocket ){
-
-						// Server Data Delegate
-						OnServerData( connectionId , channelId , buffer , dataSize );
-					}
+				// Server received data
+				i = mServers.FindIndex ( x => x.mSocket == recHostId );
+				if( i != -1 ){
+					// Empty
 				}
 
 				// Client Received Data
-				if(mClient != null){
-					if( recHostId == mClient.mSocket ){
-
-						// Client Data Delegate
-						OnClientData(  connectionId , channelId , buffer , dataSize );
-					}
+				i = mClients.FindIndex ( c => c.mSocket.Equals (recHostId) );
+				if( i != -1 ){
+					// Empty
 				}
 				break;
 
 			// Disconnect
 			case NetworkEventType.DisconnectEvent:
 
-				// Server Received Disconnect
-				if(mServer != null){
-					if( recHostId == mServer.mSocket ){
-						OnServerDisconnect( connectionId , channelId , buffer , dataSize );
-						mServer.RemoveClient ( connectionId );
-					}
+				// Server Disconnect Event
+				i = mServers.FindIndex ( x => x.mSocket == recHostId );
+				if( i != -1 ){
+						mServers[i].RemoveClient ( connectionId );
 				}
 
-				// Client Received Disconnect
-				if(mClient != null){
-					if( recHostId == mClient.mSocket && connectionId == mClient.mConnection){
-						
-						// Flag to let client know it can no longer send data
-						mClient.mConnected = false;
-
-						OnClientDisconnect(  connectionId , channelId , buffer , dataSize );
-					}
+				// Client Disconnect Event
+				i = mClients.FindIndex ( c => c.mSocket.Equals (recHostId) );
+				if( i != -1 ){
+					mClients[i].mIsConnected = false; // Set client connected to true
 				}
 				
 
 				break;
 			}
 			
-		} while ( networkEvent != NetworkEventType.Nothing );
+		}
 	}
 
 }

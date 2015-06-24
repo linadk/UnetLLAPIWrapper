@@ -11,14 +11,30 @@ public class NetClient{
 
 	public int mSocket = -1;
 	public int mConnection = -1;
-	public bool mConnected = false;
+	public string mServerIP = null;
+	public int mPort = -1;
+	public bool mIsConnected = false;
+
+	/// <summary>
+	/// Our delegate that gets called to handle processing data 	
+	/// </summary>
+	public delegate void NetEventHandler( NetworkEventType net , int connectionId , int channelId , byte[] buffer , int datasize );
+	public NetEventHandler OnMessage = null;
 	
 	/// <summary>
 	/// Initializes a new instance of the <see cref="NetClient"/> class.
 	/// </summary>
 	/// <param name="socket">Valid socket id for the NetClient. Given by NetManager.</param>
-	public NetClient ( int socket ) {
-		mSocket = socket;
+	public NetClient () {
+
+		HostTopology ht = new HostTopology( NetManager.mConnectionConfig , 1 ); // Clients only need 1 connection
+		int csocket = NetworkTransport.AddHost ( ht  );
+		
+		if(!NetUtils.IsSocketValid (csocket)){
+			Debug.Log ("NetManager::CreateClient() returned an invalid socket ( " + csocket + " )" );
+		}
+
+		mSocket = csocket;
 	}
 
 	/// <summary>
@@ -35,6 +51,10 @@ public class NetClient{
 			Debug.Log("NetClient::Connect( "  + ip + " , " + port.ToString () + " ) Failed with reason '" + NetUtils.GetNetworkError (error) + "'.");
 			return false;
 		}
+
+		mServerIP = ip;
+		mPort = port;
+
 		return true;
 	}
 
@@ -43,7 +63,7 @@ public class NetClient{
 	/// </summary>
 	public bool Disconnect( ){
 
-		if(!mConnected){
+		if(!mIsConnected){
 			Debug.Log ("NetClient::Disconnect() Failed with reason 'Not connected to server!");
 			return false;
 		}
@@ -56,6 +76,8 @@ public class NetClient{
 			Debug.Log("NetClient::Disconnect() Failed with reason '" + NetUtils.GetNetworkError (error) + "'.");
 			return false;
 		}
+
+		mIsConnected = false;
 		
 		return true;
 	}
