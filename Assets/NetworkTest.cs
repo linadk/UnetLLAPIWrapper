@@ -177,7 +177,7 @@ public class NetworkTest : MonoBehaviour {
 		}
 
 		if( args.Length < 2){
-			return "Invalid Number of Arguments : server.broadcast <message>";
+			return "Invalid Number of Arguments : sever.disconnect <clientid>";
 		}
 
 		bool res = mServer.DisconnectClient( int.Parse (args[1]) );
