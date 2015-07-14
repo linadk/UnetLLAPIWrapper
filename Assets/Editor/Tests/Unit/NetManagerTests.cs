@@ -14,7 +14,7 @@ public class NetManagerTesting {
 		Assert.AreNotEqual ( null , NetManager.mChannelUnreliable );
 		Assert.AreNotEqual( null , NetManager.mConnectionConfig );
 
-		NetworkTransport.Shutdown();
+		NetManager.Shutdown ();
 	}
 
 	[Test]
@@ -25,12 +25,12 @@ public class NetManagerTesting {
 		NetServer s = NetManager.CreateServer( 30 , 7777 );
 
 		Assert.IsNotNull (s);
-		Assert.IsNotNull( s.mSocket );
+		Assert.IsTrue( NetUtils.IsSocketValid ( s.mSocket ) );
 		Assert.IsTrue ( s.mIsRunning );
 		Assert.AreEqual( 7777 , s.mPort );
 
 		NetworkTransport.RemoveHost( s.mSocket );
-		NetworkTransport.Shutdown ();
+		NetManager.Shutdown ();
 	}
 
 	[Test]
@@ -41,12 +41,11 @@ public class NetManagerTesting {
 		NetServer s = NetManager.CreateServer( 30 , 7777 , 10 , 100 );
 		
 		Assert.IsNotNull (s);
-		Assert.IsNotNull( s.mSocket );
+		Assert.IsTrue( NetUtils.IsSocketValid ( s.mSocket ) );
 		Assert.IsTrue ( s.mIsRunning );
 		Assert.AreEqual( 7777 , s.mPort );
 		
-		NetworkTransport.RemoveHost( s.mSocket );
-		NetworkTransport.Shutdown ();
+		NetManager.Shutdown ();
 	}
 
 

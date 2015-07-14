@@ -145,6 +145,16 @@ public class NetServer {
 
 	}
 
+	/// <summary>
+	/// Disconnects all clients.
+	/// </summary>
+	public void DisconnectAllClients(){
+
+		foreach( int c in mClients ){
+			DisconnectClient( c );
+		}
+	}
+
 
 	/// <summary>
 	/// Adds a client connection to the server after making sure it will be unique. 	

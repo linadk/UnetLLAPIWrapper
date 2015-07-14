@@ -40,6 +40,17 @@ public class NetManager : MonoBehaviour {
 	}
 
 	public static void Shutdown (){
+
+		// Kill all clients
+		for( int i = 0; i < mClients.Count; i++ ){
+			DestroyClient( mClients[i] );
+		}
+
+		// Disconnect and destroy all servers
+		for( int i = 0; i < mServers.Count; i++ ){
+			DestroyServer ( mServers[i] );
+		}
+
 		NetworkTransport.Shutdown ();
 		mIsInitialized = false;
 	}
@@ -76,6 +87,8 @@ public class NetManager : MonoBehaviour {
 			Debug.Log ("NetManager::DestroyServer( " + s.mSocket.ToString() + ") - Server does not exist!");
 			return false;
 		}
+		
+		s.DisconnectAllClients ();
 
 		NetworkTransport.RemoveHost( s.mSocket );
 
@@ -116,6 +129,8 @@ public class NetManager : MonoBehaviour {
 			Debug.Log ("NetManager::DestroyClient( " + c.mSocket.ToString () + ") - Client does not exist!" );
 			return false;
 		}
+
+		c.Disconnect ();
 
 		NetworkTransport.RemoveHost( c.mSocket );
 
