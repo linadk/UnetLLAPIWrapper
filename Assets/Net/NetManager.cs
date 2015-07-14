@@ -45,14 +45,17 @@ public class NetManager : MonoBehaviour {
 	}
 	
 	/// <summary>
-	/// Creates a server that listens on a given port.
+	/// Initializes a new instance of the <see cref="NetServer"/> class. We can simulate real world network conditions by using the simMinTimeout/simMaxTimeout params
+	/// to simulate connection lag.
 	/// </summary>
 	/// <returns>The server object.</returns>
 	/// <param name="maxConnections">Max connections.</param>
 	/// <param name="port">Port.</param>
-	public static NetServer CreateServer ( int maxConnections , int port ){
+	/// <param name="simMinLatency">Minimum latency to simulate on the server.</param>
+	/// <param name="simMaxLatency">Maximum latency to simulate on the server.</param> 
+	public static NetServer CreateServer ( int maxConnections , int port , int simMinLatency = 0 , int simMaxLatency = 0 ){
 
-		NetServer s = new NetServer( maxConnections , port );
+		NetServer s = new NetServer( maxConnections , port , simMinLatency , simMaxLatency );
 
 		// If we were successful in creating our server and it is unique
 		if(s.mIsRunning && mServers.Contains (s) != true ){
@@ -61,7 +64,6 @@ public class NetManager : MonoBehaviour {
 
 		return s;
 	}
-
 
 	/// <summary>
 	/// Destroys the server.

@@ -24,11 +24,15 @@ public class NetServer {
 
 
 	/// <summary>
-	/// Initializes a new instance of the <see cref="NetServer"/> class.
+	/// Initializes a new instance of the <see cref="NetServer"/> class. We can simulate real world network conditions by using the simMinTimeout/simMaxTimeout params
+	/// to simulate connection lag.
 	/// </summary>
 	/// <param name="maxConnections">Max connections.</param>
 	/// <param name="port">Port.</param>
-	public NetServer( int maxConnections , int port ) {
+	/// <param name="simMinTimeout">Minimum lag timeout to simulate in ms. Set to zero for none.</param>
+	/// <param name="simMaxTimeout">Maximum lag timeout to simulate in ms. Set to zero for none.</param> 
+	/// 
+	public NetServer( int maxConnections , int port , int simMinTimeout = 0 , int simMaxTimeout = 0 ) {
 
 		if(!NetManager.mIsInitialized){
 			Debug.Log ("NetServer( ... ) - NetManager was not initialized. Did you forget to call NetManager.Init()?");
@@ -36,7 +40,14 @@ public class NetServer {
 		}
 
 		HostTopology ht = new HostTopology( NetManager.mConnectionConfig , maxConnections );
-		mSocket = NetworkTransport.AddHost ( ht , port  );
+
+		if( simMinTimeout != 0 || simMaxTimeout != 0 ){
+			mSocket = NetworkTransport.AddHostWithSimulator ( ht , simMinTimeout , simMaxTimeout , port );
+		} else {
+			mSocket = NetworkTransport.AddHost ( ht , port  );
+		}
+
+		mPort = port;
 
 		if(!NetUtils.IsSocketValid (mSocket)){
 			Debug.Log ("NetServer::NetServer( " + maxConnections + " , " + port.ToString () + " ) returned an invalid socket ( " + mSocket.ToString() + " )" );
